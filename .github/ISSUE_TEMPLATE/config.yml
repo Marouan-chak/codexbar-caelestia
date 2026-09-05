@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: CodexBar CLI issues
+    url: https://github.com/steipete/CodexBar/issues
+    about: Provider errors, auth problems, or payload changes belong upstream.
+  - name: Caelestia Shell issues
+    url: https://github.com/caelestia-dots/shell/issues
+    about: Problems with the shell itself, unrelated to this bar entry.
+  - name: codexbar-waybar
+    url: https://github.com/Marouan-chak/codexbar-waybar/issues
+    about: The sibling project, for Waybar rather than Quickshell.

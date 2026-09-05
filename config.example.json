@@ -1,0 +1,8 @@
+{
+  "codexbarBin": "/home/you/.local/bin/codexbar",
+  "refreshSeconds": 300,
+  "ringSize": 0,
+  "showLabels": true,
+  "useProviderLogos": true,
+  "hiddenProviders": []
+}

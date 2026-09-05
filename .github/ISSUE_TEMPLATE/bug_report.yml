@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in the bar entry or its backend is not working
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Problems with the `codexbar` CLI itself (a provider erroring, a payload
+        changing shape) belong upstream at
+        [steipete/CodexBar](https://github.com/steipete/CodexBar). If the CLI
+        works but this bar does not, you are in the right place.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is Caelestia installed?
+      description: Only the packaged layout is supported — see "Supported installs" in the README.
+      options:
+        - Distro package (AUR caelestia-shell, or similar)
+        - Manual clone / CMake
+        - Nix
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: e.g. `pacman -Q caelestia-shell quickshell-git qt6-base`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of ./install.sh --check
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: backend
+    attributes:
+      label: Backend output
+      description: |
+        `~/.local/share/codexbar-caelestia/codexbar-usage.sh | jq`
+        This includes your plan names and usage figures — redact anything you would rather not publish.
+      render: json
+  - type: textarea
+    id: log
+    attributes:
+      label: Shell log
+      description: "`caelestia shell -l | grep -i codex` — the log is cumulative, so check timestamps."
+      render: text
