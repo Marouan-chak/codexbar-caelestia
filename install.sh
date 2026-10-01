@@ -82,10 +82,10 @@ fi
     || die "the codexbar CLI was not found. Install it (see the README) or set CODEXBAR_BIN."
 echo "Using the codexbar CLI at $CODEXBAR"
 
-# Antigravity needs a small LD_PRELOAD shim to trust its language server's
-# self-signed loopback certificate. Build it now so the first bar refresh is
-# not the thing that discovers there is no compiler. Not having one is fine:
-# Antigravity then reports a provider error and every other ring still works.
+# Reading Antigravity from a running IDE needs a small LD_PRELOAD shim to
+# trust its language server's self-signed loopback certificate. Build it now so
+# the first bar refresh is not the thing that discovers there is no compiler.
+# Not having one is fine: CodexBar falls back to `agy -p /usage` instead.
 if grep -q '"antigravity"' "${HOME}/.codexbar/config.json" 2>/dev/null; then
     CC_BIN="$(command -v cc || command -v gcc || command -v clang || true)"
     if [[ -n "$CC_BIN" ]]; then
@@ -95,10 +95,10 @@ if grep -q '"antigravity"' "${HOME}/.codexbar/config.json" 2>/dev/null; then
             "${REPO_DIR}/scripts/cert_redirect.c" -ldl 2>/dev/null; then
             echo "Built the Antigravity TLS shim"
         else
-            echo "warning: could not build the Antigravity TLS shim; that provider may error" >&2
+            echo "warning: could not build the Antigravity TLS shim; usage will come from agy, not the IDE" >&2
         fi
     else
-        echo "warning: no C compiler found; Antigravity is enabled but will likely error" >&2
+        echo "warning: no C compiler found; Antigravity usage will come from agy, not the IDE" >&2
     fi
 fi
 

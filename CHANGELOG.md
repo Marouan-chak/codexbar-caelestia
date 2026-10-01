@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Antigravity shows live usage again instead of only cached data.** The
+  script injected `~/.gemini/oauth_creds.json` (the Gemini CLI's login, not
+  Antigravity's) as OAuth credentials. CodexBar then skipped `agy -p /usage`,
+  its only live source on Linux once `agy` 1.2.2 stopped answering it locally,
+  and fell to an OAuth refresh that Linux cannot perform. Credentials are now
+  injected only when `CODEXBAR_ANTIGRAVITY_CREDS` is set. Needs CodexBar
+  0.60.2 or newer.
+- **CodexBar's `offline` result is treated as a failure.** It carries no
+  error, so it replaced the last good snapshot and the ring showed 0%. It now
+  reports its diagnostic and the cached snapshot stands in. Extra windows
+  marked `usageKnown: false` are dropped too.
 - **A failing provider no longer destroys its own cached snapshot.** The
   payload was cached wholesale, so the first refresh where a provider errored
   overwrote its last good data and the fallback had nothing to serve. The cache

@@ -49,6 +49,27 @@ RESPONSES = {
     "codex": [{"provider": "codex", "error": {"message": "HTTP 429"}}],
 }
 
+# What the CLI returns once every live Antigravity source has failed: no error,
+# just a non-quota row. Trimmed from a real 0.70.0 response.
+ANTIGRAVITY_OFFLINE = [
+    {
+        "provider": "antigravity",
+        "source": "offline",
+        "diagnostic": "Live Antigravity usage is unavailable; showing offline data.",
+        "usage": {
+            "loginMethod": "offline",
+            "extraRateWindows": [
+                {
+                    "id": "antigravity-offline-conversations",
+                    "title": "Offline · 11 conversations",
+                    "usageKnown": False,
+                    "window": {"usedPercent": 0},
+                }
+            ],
+        },
+    }
+]
+
 STUB = r"""#!/usr/bin/env bash
 # Stand-in for the codexbar CLI: answers `usage --provider <p>` from a fixture.
 provider=""
@@ -207,6 +228,53 @@ class SourceSelectionTest(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("jq"), "jq is required")
+class AntigravityCredentialsTest(unittest.TestCase):
+    """Injected OAuth creds make the CLI skip `agy -p /usage`, its only working
+    Linux source, so they must never be picked up implicitly."""
+
+    RECORD_ENV = (
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "${ANTIGRAVITY_OAUTH_CREDENTIALS_JSON:-<unset>}" > "$FIXTURE_DIR/creds.log"\n'
+        "echo '[]'\n"
+    )
+
+    def _injected(self, env_extra=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            fixtures = tmp / "fixtures"
+            fixtures.mkdir()
+            # A stale Gemini CLI login, where the script used to look by default.
+            (tmp / ".gemini").mkdir()
+            (tmp / ".gemini" / "oauth_creds.json").write_text('{"refresh_token": "gemini"}')
+            stub = tmp / "codexbar"
+            stub.write_text(self.RECORD_ENV)
+            stub.chmod(0o755)
+            env = dict(os.environ)
+            env.pop("ANTIGRAVITY_OAUTH_CREDENTIALS_JSON", None)
+            env.update(
+                {
+                    "HOME": str(tmp),
+                    "CODEXBAR_BIN": str(stub),
+                    "CODEXBAR_PROVIDERS": "antigravity",
+                    "CODEXBAR_STAGGER": "0",
+                    "FIXTURE_DIR": str(fixtures),
+                    "XDG_CACHE_HOME": str(tmp / "cache"),
+                    "XDG_CONFIG_HOME": str(tmp / "config"),
+                }
+            )
+            env.update({k: v.format(tmp=tmp) for k, v in (env_extra or {}).items()})
+            subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, env=env, timeout=60)
+            return (fixtures / "creds.log").read_text().strip()
+
+    def test_gemini_creds_are_not_injected_by_default(self):
+        self.assertEqual(self._injected(), "<unset>")
+
+    def test_an_explicit_creds_path_is_still_injected(self):
+        injected = self._injected({"CODEXBAR_ANTIGRAVITY_CREDS": "{tmp}/.gemini/oauth_creds.json"})
+        self.assertEqual(injected, '{"refresh_token": "gemini"}')
+
+
+@unittest.skipUnless(shutil.which("jq"), "jq is required")
 class FailureTest(unittest.TestCase):
     def test_invalid_json_yields_an_error_entry_not_a_crash(self):
         proc, out = run({}, fallback="not json at all", providers="codex")
@@ -291,6 +359,47 @@ class FailureTest(unittest.TestCase):
         _, out = run(responses, providers="codex")
         labels = [w["label"] for w in out["providers"][0]["windows"]]
         self.assertEqual(labels, ["Weekly"])
+
+    def test_an_offline_snapshot_is_a_failure_not_zero_usage(self):
+        _, out = run({"antigravity": ANTIGRAVITY_OFFLINE}, providers="antigravity")
+        provider = out["providers"][0]
+        self.assertFalse(out["available"])
+        self.assertIn("Live Antigravity usage is unavailable", provider["error"])
+        self.assertEqual(provider["windows"], [])
+
+    def test_an_offline_snapshot_falls_back_to_the_cached_one(self):
+        # Regression: "offline" carried no error, so it replaced the last good
+        # snapshot in the cache and the ring showed 0%.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            fixtures = tmp / "fixtures"
+            fixtures.mkdir()
+            stub = tmp / "codexbar"
+            stub.write_text(STUB)
+            stub.chmod(0o755)
+            env = dict(os.environ)
+            env.update({
+                "CODEXBAR_BIN": str(stub), "CODEXBAR_PROVIDERS": "antigravity",
+                "CODEXBAR_STAGGER": "0", "FIXTURE_DIR": str(fixtures),
+                "FALLBACK_OUTPUT": "", "XDG_CACHE_HOME": str(tmp / "cache"),
+                "XDG_CONFIG_HOME": str(tmp / "config"),
+            })
+
+            def run_once():
+                return json.loads(subprocess.run(
+                    ["bash", str(SCRIPT)], capture_output=True, text=True,
+                    env=env, timeout=60).stdout)
+
+            (fixtures / "antigravity.json").write_text(json.dumps(RESPONSES["antigravity"]))
+            run_once()
+            (fixtures / "antigravity.json").write_text(json.dumps(ANTIGRAVITY_OFFLINE))
+            run_once()
+            second = run_once()
+
+            provider = second["providers"][0]
+            self.assertAlmostEqual(provider["maxPercent"], 1.1, msg="cached snapshot was lost")
+            self.assertTrue(provider["stale"])
+            self.assertIsNone(provider["error"])
 
     def test_a_failed_provider_falls_back_to_its_cached_snapshot(self):
         # Two runs sharing one cache dir: the second has codex failing, and

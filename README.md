@@ -30,11 +30,11 @@ You need:
 
 * [Caelestia Shell](https://github.com/caelestia-dots/shell) 2.4.0 or newer
 * `quickshell` 0.3 or newer
-* The [CodexBar](https://github.com/steipete/CodexBar/releases/latest) Linux CLI
+* The [CodexBar](https://github.com/steipete/CodexBar/releases/latest) Linux CLI (0.60.2 or newer for Antigravity)
 * `jq`
 * `python3`
 
-A C compiler is required only for Antigravity support.
+A C compiler is needed only to read Antigravity usage from a running Antigravity IDE.
 
 ### Caelestia installation
 
@@ -188,19 +188,15 @@ Successful results are also cached. If one provider fails during a later refresh
 
 ## Antigravity on Linux
 
-Antigravity needs a little extra handling because CodexBar was originally built around its macOS authentication flow.
+CodexBar reads Antigravity quotas from a running Antigravity IDE when there is one, and otherwise from the `agy` CLI's own `/usage` report. Neither needs credentials beyond your `agy` login.
+
+The `/usage` report needs CodexBar 0.60.2 or newer. Since `agy` 1.2.2, older CodexBar releases cannot reach `agy` at all, and the ring only ever shows cached data.
 
 ### Credentials
 
-On Linux, `agy login` stores credentials at:
+CodexBar's OAuth source is not used by default. Injecting OAuth credentials makes CodexBar skip the `agy` report, and on Linux it cannot refresh an expired token without the Antigravity OAuth client, which it only finds inside the macOS app.
 
-```text
-~/.gemini/oauth_creds.json
-```
-
-CodexBar normally expects Antigravity credentials elsewhere. The backend script handles this translation automatically.
-
-You can override the credential path with:
+If you have set `ANTIGRAVITY_OAUTH_CLIENT_ID` and `ANTIGRAVITY_OAUTH_CLIENT_SECRET` yourself, you can opt in with:
 
 ```bash
 CODEXBAR_ANTIGRAVITY_CREDS=/path/to/oauth_creds.json
@@ -208,7 +204,7 @@ CODEXBAR_ANTIGRAVITY_CREDS=/path/to/oauth_creds.json
 
 ### TLS
 
-Antigravity communicates with its local language server using a self signed TLS certificate.
+A running Antigravity IDE serves usage from a local language server with a self signed TLS certificate.
 
 The installer builds a small local shim from:
 
@@ -224,7 +220,7 @@ and stores it under:
 
 This allows CodexBar to trust the local Antigravity certificate without modifying your system certificate store.
 
-If the shim cannot be built, only Antigravity is affected. The other providers continue working normally.
+If the shim cannot be built, CodexBar falls back to the `agy` report. The other providers are never affected.
 
 ## What gets installed
 
@@ -353,13 +349,19 @@ Provider errors returned by CodexBar are included in the JSON response.
 
 ### Antigravity does not work
 
-Make sure:
+If the ring only ever shows `cached`, CodexBar has no working live source. Make sure:
 
-* `agy login` has been completed
-* The Antigravity language server is running
-* A C compiler was available when `install.sh` ran
+* Your CodexBar CLI is 0.60.2 or newer
+* `agy` is signed in, so that `agy -p /usage` prints your quotas
+* `CODEXBAR_ANTIGRAVITY_CREDS` is not set, unless you configured the OAuth client as described above
 
-Running the installer again will retry building the TLS shim.
+To see CodexBar's own reasoning, run:
+
+```bash
+codexbar usage --provider antigravity --format json -v
+```
+
+Each strategy it tried is listed with its error. A result whose `source` is `offline` means every live strategy failed.
 
 ### Provider logos are missing
 

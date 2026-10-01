@@ -81,10 +81,12 @@ STAGGER_SECS="${CODEXBAR_STAGGER:-0.5}"
 PROVIDER_TIMEOUT_SECS="${CODEXBAR_PROVIDER_TIMEOUT:-20}"
 
 # --- Antigravity ----------------------------------------------------------
-# The CLI expects Google OAuth creds at ~/.codexbar/antigravity/oauth_creds.json
-# (written by the macOS app). On Linux `agy login` drops the same creds at
-# ~/.gemini/oauth_creds.json, so bridge that into the env var instead.
-ANTIGRAVITY_CREDS="${CODEXBAR_ANTIGRAVITY_CREDS:-${HOME}/.gemini/oauth_creds.json}"
+# The CLI reads quotas from a running IDE's language server, or else from
+# `agy -p /usage`, and needs no credentials for either. OAuth creds are opt-in
+# only: injecting them makes the CLI skip the `agy` report, and on Linux the
+# OAuth source cannot refresh a token without ANTIGRAVITY_OAUTH_CLIENT_ID and
+# ANTIGRAVITY_OAUTH_CLIENT_SECRET, so a stale token silently broke the ring.
+ANTIGRAVITY_CREDS="${CODEXBAR_ANTIGRAVITY_CREDS:-}"
 ANTIGRAVITY_CUSTOM_CA_BUNDLE=""
 ANTIGRAVITY_LD_PRELOAD=""
 
@@ -289,7 +291,11 @@ normalised="$(echo "$merged" | jq -c --arg now "$(date -u +%FT%TZ)" '
             account: (.account // null),
             source: (.source // null),
             stale: (.stale == true),
-            error: (.error.message // .error // null),
+            # "offline" is the CLI giving up on live data and reporting no
+            # quota, so it is a failure: that is what lets the cached
+            # snapshot stand in rather than a ring stuck at 0%.
+            error: (.error.message // .error
+                    // (if .source == "offline" then (.diagnostic // "live usage is unavailable") else null end)),
             maxPercent: (
                 [$u.primary.usedPercent, $u.secondary.usedPercent, $u.tertiary.usedPercent]
                 | map(select(type == "number")) | max // null
@@ -301,7 +307,7 @@ normalised="$(echo "$merged" | jq -c --arg now "$(date -u +%FT%TZ)" '
                 as_window($u.primary;   window_label($u.primary.windowMinutes;   $p; "primary")),
                 as_window($u.secondary; window_label($u.secondary.windowMinutes; $p; "secondary")),
                 as_window($u.tertiary;  window_label($u.tertiary.windowMinutes;  $p; "tertiary")),
-                ($u.extraRateWindows[]? | as_window(.window; (.title // "Extra")))
+                ($u.extraRateWindows[]? | select(.usageKnown != false) | as_window(.window; (.title // "Extra")))
             ]
         }
     )
